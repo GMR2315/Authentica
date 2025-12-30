@@ -1,0 +1,83 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Product {
+  product_id    String   @id @default(cuid())
+  name          String
+  model         String
+  serial_number String   @unique
+  description   String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relations
+  nft_passport NFTPassport?
+  tag          Tag?
+  provenance   ProvenanceEvent[]
+}
+
+model NFTPassport {
+  nft_passport_id  String   @id @default(cuid())
+  product_id       String   @unique
+  token_id         BigInt   @unique
+  contract_address String
+  metadata_hash    String
+  metadata_cid     String
+  mint_tx_hash     String
+  minted_at        DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [product_id], references: [product_id])
+  tag     Tag?
+}
+
+model Tag {
+  tag_pk          String   @id @default(cuid())
+  tag_id          String   @unique
+  product_id      String   @unique
+  nft_passport_id String   @unique
+  tag_type        TagType
+  issued_at       DateTime @default(now())
+
+  // Relations
+  product      Product     @relation(fields: [product_id], references: [product_id])
+  nft_passport NFTPassport @relation(fields: [nft_passport_id], references: [nft_passport_id])
+}
+
+model ProvenanceEvent {
+  event_id          String   @id @default(cuid())
+  product_id        String
+  event_type        String
+  event_description String?
+  event_time        DateTime
+  created_at        DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [product_id], references: [product_id])
+}
+
+model VerificationLog {
+  verification_id String             @id @default(cuid())
+  tag_id          String
+  status          VerificationStatus
+  scanned_at      DateTime           @default(now())
+}
+
+enum TagType {
+  QR
+  NFC
+  RFID
+  PUF
+}
+
+enum VerificationStatus {
+  AUTHENTIC
+  TAMPERED
+  FAKE
+}
