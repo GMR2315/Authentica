@@ -16,6 +16,26 @@ model Product {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
+  // Optional fields for UI (Register Product, Dashboard, Upload Assets, Provenance)
+  category               String?   // Dropdown: e.g. Electronics, Apparel
+  brand                  String?   // Brand name
+  manufacturing_date     DateTime? // Manufacturing date (date picker)
+  manufacturing_location String?   // Where product was manufactured
+  materials              String?   // e.g. "Gold, Leather, Stainless Steel"
+  weight_grams           Int?      // Weight in grams
+  dimensions             String?   // e.g. "10 x 5 x 2 cm"
+  color                  String?   // Color
+  special_features       String?   // Special features text
+  retail_price           Decimal?  @db.Decimal(12, 2) // Retail price in dollars
+  warranty_period        String?   // e.g. "2 years", "Lifetime"
+  tags                   String?   // Comma-separated tags for search/filtering
+  sku                    String?   // Product SKU (non-unique)
+  quantity               Int?      // Product quantity
+  batch_id               String?   // e.g. "BATCH-001"
+  quality_score          Float?    // e.g. 98.5
+  image_cids             String[]  @default([]) // IPFS CIDs or URLs for product images
+  document_cids          String[]  @default([]) // IPFS CIDs or URLs for documents
+
   // Relations
   nft_passport NFTPassport?
   tag          Tag?
