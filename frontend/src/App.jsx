@@ -1,6 +1,9 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom'
 import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
+import HomePage from './pages/HomePage'
+import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
 import ProductRegistration from './pages/ProductRegistration'
 import AssetsUpload from './pages/AssetsUpload'
@@ -12,18 +15,20 @@ import VerificationResult from './pages/VerificationResult'
 function App() {
   return (
     <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Navigate to="/admin" replace />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/register-product" element={<ProductRegistration />} />
-          <Route path="/admin/upload-assets" element={<AssetsUpload />} />
-          <Route path="/admin/mint-passport" element={<MintPassport />} />
-          <Route path="/admin/provenance" element={<ProvenanceTimeline />} />
-          <Route path="/scan" element={<ScanPage />} />
-          <Route path="/verify" element={<VerificationResult />} />
-        </Routes>
-      </Layout>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/scan" element={<ScanPage />} />
+        <Route path="/verify" element={<VerificationResult />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<ProtectedRoute><Layout><Outlet /></Layout></ProtectedRoute>}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="register-product" element={<ProductRegistration />} />
+          <Route path="upload-assets" element={<AssetsUpload />} />
+          <Route path="mint-passport" element={<MintPassport />} />
+          <Route path="provenance" element={<ProvenanceTimeline />} />
+        </Route>
+      </Routes>
     </Router>
   )
 }

@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
+import api from '../services/api'
+
+const STATUS_MAP = {
+  AUTHENTIC: 'authentic',
+  TAMPERED: 'tampered',
+  FAKE: 'fake',
+  BLOCKCHAIN_UNAVAILABLE: 'unavailable'
+}
 
 export default function VerificationResult() {
   const location = useLocation()
@@ -25,93 +33,38 @@ export default function VerificationResult() {
   const performVerification = async (tagId) => {
     try {
       setLoading(true)
-      
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Mock different verification results based on tag ID
-      let mockData
-      if (tagId === 'TAG-001-XYZ') {
-        mockData = {
-          status: 'authentic',
-          tagId,
-          verifiedAt: new Date().toISOString(),
-          product: {
-            name: 'Luxury Watch Model X',
-            brand: 'SwissLux',
-            model: 'Model X',
-            serialNumber: 'SN123456789',
-            manufacturingDate: '2024-01-15T00:00:00Z',
-            manufacturingLocation: 'Geneva, Switzerland'
-          },
-          passport: {
-            nftId: 'NFT-12345',
-            mintedAt: '2024-01-16T14:00:00Z',
-            transactionHash: '0xabc123...'
-          },
-          verification: {
-            method: scanMethod || 'manual',
-            confidence: '100%',
-            verifiedBy: 'Authentica System',
-            blockNumber: '18500000'
-          },
-          history: [
-            {
-              date: '2024-01-15T08:00:00Z',
-              event: 'Product Manufactured',
-              location: 'Geneva, Switzerland'
-            },
-            {
-              date: '2024-01-16T14:00:00Z',
-              event: 'Digital Passport Minted',
-              location: 'Blockchain'
-            },
-            {
-              date: '2024-01-20T16:30:00Z',
-              event: 'Product Sold',
-              location: 'Zurich, Switzerland'
+      setError('')
+      console.log('🔥 Calling backend verify API for:', tagId)
+      const response = await api.get(`/api/verify/${encodeURIComponent(tagId)}`)
+      const data = response.data
+      const status = STATUS_MAP[data.status] ?? data.status?.toLowerCase() ?? 'fake'
+      setVerificationData({
+        status,
+        tagId: data.tag_id,
+        verifiedAt: data.verified_at,
+        reason: data.reason,
+        product: data.product
+          ? {
+              name: data.product.name,
+              model: data.product.model,
+              serial_number: data.product.serial_number,
+              serialNumber: data.product.serial_number,
+              brand: data.product.brand ?? null
             }
-          ]
-        }
-      } else if (tagId === 'TAG-002-ABC') {
-        mockData = {
-          status: 'tampered',
-          tagId,
-          verifiedAt: new Date().toISOString(),
-          product: {
-            name: 'Designer Handbag',
-            brand: 'Fashion House',
-            model: 'Classic Line',
-            serialNumber: 'SN987654321',
-            manufacturingDate: '2024-01-10T00:00:00Z',
-            manufacturingLocation: 'Milan, Italy'
-          },
-          verification: {
-            method: scanMethod || 'manual',
-            confidence: '85%',
-            verifiedBy: 'Authentica System',
-            issues: ['Serial number format mismatch', 'Registration inconsistencies detected']
-          },
-          alert: 'This product shows signs of potential tampering. Please contact customer support.'
-        }
+          : null,
+        details: data.details || {},
+        verification: { method: scanMethod || 'manual', verifiedBy: 'Authentica System' },
+        alert: data.reason || (status === 'fake' ? 'This Tag ID is not found in our system. The product may be counterfeit.' : null)
+      })
+    } catch (err) {
+      console.error('Verification error:', err)
+      if (err.response?.status === 404) {
+        setError('Tag not found.')
+      } else if (err.request) {
+        setError('Server unavailable.')
       } else {
-        mockData = {
-          status: 'fake',
-          tagId,
-          verifiedAt: new Date().toISOString(),
-          verification: {
-            method: scanMethod || 'manual',
-            confidence: '95%',
-            verifiedBy: 'Authentica System'
-          },
-          alert: 'This Tag ID is not found in our system. The product may be counterfeit.'
-        }
+        setError('Verification failed. Please try again.')
       }
-      
-      setVerificationData(mockData)
-    } catch (error) {
-      console.error('Verification error:', error)
-      setError('Verification failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -143,6 +96,14 @@ export default function VerificationResult() {
             </svg>
           </div>
         )
+      case 'unavailable':
+        return (
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
+            <svg className="h-8 w-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3" />
+            </svg>
+          </div>
+        )
       default:
         return null
     }
@@ -156,6 +117,8 @@ export default function VerificationResult() {
         return 'Warning: Signs of tampering detected'
       case 'fake':
         return 'Alert: Product appears to be counterfeit'
+      case 'unavailable':
+        return 'Blockchain unavailable. Please try again later.'
       default:
         return 'Verification completed'
     }
@@ -188,8 +151,8 @@ export default function VerificationResult() {
               <Button onClick={() => navigate('/scan')} className="w-full">
                 Try Again
               </Button>
-              <Button variant="outline" onClick={() => navigate('/admin')} className="w-full">
-                Admin Dashboard
+              <Button variant="outline" onClick={() => navigate('/')} className="w-full">
+                Back to Home
               </Button>
             </div>
           </Card.Content>
@@ -215,10 +178,10 @@ export default function VerificationResult() {
             
             {verificationData.alert && (
               <div className={`mt-4 p-4 rounded-lg ${
-                verificationData.status === 'fake' ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'
+                verificationData.status === 'fake' ? 'bg-red-50 border border-red-200' : verificationData.status === 'unavailable' ? 'bg-gray-50 border border-gray-200' : 'bg-yellow-50 border border-yellow-200'
               }`}>
                 <p className={`text-sm ${
-                  verificationData.status === 'fake' ? 'text-red-800' : 'text-yellow-800'
+                  verificationData.status === 'fake' ? 'text-red-800' : verificationData.status === 'unavailable' ? 'text-gray-800' : 'text-yellow-800'
                 }`}>
                   {verificationData.alert}
                 </p>
@@ -240,27 +203,74 @@ export default function VerificationResult() {
                   <p className="font-medium text-gray-900">{verificationData.product.name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Brand</p>
-                  <p className="font-medium text-gray-900">{verificationData.product.brand}</p>
-                </div>
-                <div>
                   <p className="text-sm text-gray-500">Model</p>
                   <p className="font-medium text-gray-900">{verificationData.product.model}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Serial Number</p>
-                  <p className="font-medium text-gray-900">{verificationData.product.serialNumber}</p>
+                  <p className="font-medium text-gray-900">{verificationData.product.serialNumber ?? verificationData.product.serial_number}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Manufacturing Date</p>
-                  <p className="font-medium text-gray-900">
-                    {new Date(verificationData.product.manufacturingDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Manufacturing Location</p>
-                  <p className="font-medium text-gray-900">{verificationData.product.manufacturingLocation}</p>
-                </div>
+                {verificationData.product.brand != null && verificationData.product.brand !== '' && (
+                  <div>
+                    <p className="text-sm text-gray-500">Brand</p>
+                    <p className="font-medium text-gray-900">{verificationData.product.brand}</p>
+                  </div>
+                )}
+              </div>
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* Verified Lifecycle (read-only, when AUTHENTIC) */}
+        {verificationData.status === 'authentic' && (verificationData.history?.length > 0 || verificationData.details?.minted_at || verificationData.verifiedAt) && (
+          <Card className="mb-8">
+            <Card.Header>
+              <h2 className="text-lg font-semibold text-gray-900">Verified Lifecycle</h2>
+            </Card.Header>
+            <Card.Content>
+              <div className="space-y-4">
+                {verificationData.history?.length > 0
+                  ? verificationData.history.map((event, index) => (
+                      <div key={index} className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-2 h-2 bg-primary-600 rounded-full mt-2" />
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <p className="font-medium text-gray-900">{event.event}</p>
+                            <p className="text-sm text-gray-500">
+                              {event.date ? new Date(event.date).toLocaleDateString() : '—'}
+                            </p>
+                          </div>
+                          {event.location && <p className="text-sm text-gray-600">{event.location}</p>}
+                        </div>
+                      </div>
+                    ))
+                  : [
+                      verificationData.details?.minted_at && {
+                        event: 'Passport minted',
+                        date: verificationData.details.minted_at,
+                        location: 'Blockchain',
+                      },
+                      verificationData.verifiedAt && {
+                        event: 'Verified',
+                        date: verificationData.verifiedAt,
+                        location: 'Authentica',
+                      },
+                    ]
+                      .filter(Boolean)
+                      .map((event, index) => (
+                        <div key={index} className="flex items-start gap-4">
+                          <div className="flex-shrink-0 w-2 h-2 bg-primary-600 rounded-full mt-2" />
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start">
+                              <p className="font-medium text-gray-900">{event.event}</p>
+                              <p className="text-sm text-gray-500">
+                                {event.date ? new Date(event.date).toLocaleString() : '—'}
+                              </p>
+                            </div>
+                            {event.location && <p className="text-sm text-gray-600">{event.location}</p>}
+                          </div>
+                        </div>
+                      ))}
               </div>
             </Card.Content>
           </Card>
@@ -306,25 +316,21 @@ export default function VerificationResult() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-gray-500">Verification Method</p>
-                <p className="font-medium text-gray-900 capitalize">{verificationData.verification.method}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Confidence Level</p>
-                <p className="font-medium text-gray-900">{verificationData.verification.confidence}</p>
+                <p className="font-medium text-gray-900 capitalize">{verificationData.verification?.method ?? '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Verified At</p>
                 <p className="font-medium text-gray-900">
-                  {new Date(verificationData.verifiedAt).toLocaleString()}
+                  {verificationData.verifiedAt ? new Date(verificationData.verifiedAt).toLocaleString() : '—'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Verified By</p>
-                <p className="font-medium text-gray-900">{verificationData.verification.verifiedBy}</p>
+                <p className="font-medium text-gray-900">{verificationData.verification?.verifiedBy ?? '—'}</p>
               </div>
             </div>
-            
-            {verificationData.verification.issues && (
+
+            {verificationData.verification?.issues && (
               <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <p className="text-sm font-medium text-yellow-800 mb-2">Issues Detected:</p>
                 <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
@@ -378,11 +384,9 @@ export default function VerificationResult() {
               Print Certificate
             </Button>
           )}
-          <Link to="/admin" className="flex-1 sm:flex-none">
-            <Button variant="secondary" className="w-full">
-              Admin Dashboard
-            </Button>
-          </Link>
+          <Button variant="outline" onClick={() => navigate('/')} className="flex-1 sm:flex-none">
+            Back to Home
+          </Button>
         </div>
       </div>
     </div>

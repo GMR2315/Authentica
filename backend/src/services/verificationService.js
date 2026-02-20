@@ -4,12 +4,15 @@ import { fetchFromIPFS } from './ipfsService.js';
 import { canonicalStringify } from './metadataService.js';
 
 /**
- * Verification result statuses (matches VerificationStatus enum in Prisma schema).
+ * Verification result statuses.
+ * AUTHENTIC, TAMPERED, FAKE match Prisma VerificationStatus enum.
+ * BLOCKCHAIN_UNAVAILABLE is for API response only (not stored in VerificationLog).
  */
 export const VerificationStatus = {
   AUTHENTIC: 'AUTHENTIC',
   TAMPERED: 'TAMPERED',
   FAKE: 'FAKE',
+  BLOCKCHAIN_UNAVAILABLE: 'BLOCKCHAIN_UNAVAILABLE',
 };
 
 /**
@@ -69,6 +72,54 @@ export async function verifyProduct(tagId) {
   try {
     onChainHash = await getHashFromChain(passport.token_id);
   } catch (err) {
+    const isNetworkError =
+      err.code === 'NETWORK_ERROR' ||
+      err.code === 'ECONNREFUSED' ||
+      err.code === 'ETIMEDOUT' ||
+      err.message?.includes('missing response') ||
+      err.message?.toLowerCase().includes('network');
+    const errMsg = (err.message || '') + (err.reason || '') + (err.shortMessage || '');
+    const isTokenNotExist =
+      errMsg.includes('token does not exist') ||
+      errMsg.includes('NFTPassport: token') ||
+      (err.code === 'CALL_EXCEPTION' && errMsg.includes('token'));
+
+    if (isNetworkError) {
+      logInternal(cleanTagId, 'BLOCKCHAIN_UNAVAILABLE', {
+        step: 'blockchain_fetch',
+        token_id: passport.token_id.toString(),
+        error: err.message,
+        hint: 'RPC unreachable or timeout',
+      });
+      return buildPublicResult(
+        cleanTagId,
+        VerificationStatus.BLOCKCHAIN_UNAVAILABLE,
+        'Blockchain unavailable. Please try again later.',
+        product,
+        { tag_type: tag.tag_type, minted_at: passport.minted_at },
+      );
+    }
+
+    if (isTokenNotExist) {
+      console.error(
+        `[verification] MISMATCH: Tag ${cleanTagId} exists in DB (token_id=${passport.token_id}) but token does not exist on chain. Possible chain reset or wrong CONTRACT_ADDRESS.`,
+      );
+      logInternal(cleanTagId, 'TAMPERED', {
+        step: 'blockchain_fetch',
+        token_id: passport.token_id.toString(),
+        error: err.message,
+        hint: 'Tag in DB but not on chain',
+      });
+      await logVerification(cleanTagId, VerificationStatus.TAMPERED);
+      return buildPublicResult(
+        cleanTagId,
+        VerificationStatus.TAMPERED,
+        'Verification failed: on-chain record not found (possible chain reset).',
+        product,
+        { tag_type: tag.tag_type, minted_at: passport.minted_at },
+      );
+    }
+
     logInternal(cleanTagId, 'TAMPERED', {
       step: 'blockchain_fetch',
       token_id: passport.token_id.toString(),

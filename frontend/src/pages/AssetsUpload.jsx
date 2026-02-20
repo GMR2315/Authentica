@@ -1,16 +1,45 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import LoadingSpinner from '../components/LoadingSpinner'
+import api, { productAPI } from '../services/api'
 
 export default function AssetsUpload() {
   const navigate = useNavigate()
+  const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
+  const [selectedProductId, setSelectedProductId] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState([])
   const [selectedFiles, setSelectedFiles] = useState([])
   const [dragActive, setDragActive] = useState(false)
+  const [uploadMessage, setUploadMessage] = useState({ type: '', text: '' })
   const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchProducts = async () => {
+      try {
+        const response = await productAPI.getAll()
+        if (!cancelled && response?.data) {
+          setProducts(Array.isArray(response.data) ? response.data : [])
+          if (response.data?.length > 0 && !selectedProductId) {
+            setSelectedProductId(response.data[0].product_id)
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setProducts([])
+          setUploadMessage({ type: 'error', text: 'Failed to load products.' })
+        }
+      } finally {
+        if (!cancelled) setProductsLoading(false)
+      }
+    }
+    fetchProducts()
+    return () => { cancelled = true }
+  }, [])
 
   const handleDrag = (e) => {
     e.preventDefault()
@@ -99,25 +128,51 @@ export default function AssetsUpload() {
 
   const handleUpload = async () => {
     if (selectedFiles.length === 0) {
-      alert('Please select files to upload')
+      setUploadMessage({ type: 'error', text: 'Please select files to upload.' })
+      return
+    }
+    if (!selectedProductId) {
+      setUploadMessage({ type: 'error', text: 'Please select a product.' })
       return
     }
 
     setUploading(true)
+    setUploadMessage({ type: '', text: '' })
+
+    const formData = new FormData()
+    selectedFiles.forEach((f) => formData.append('files', f.file))
 
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      setUploadedFiles(prev => [...prev, ...selectedFiles])
-      setSelectedFiles([])
-      alert('Files uploaded successfully!')
+      const response = await api.post(
+        `/api/admin/products/${selectedProductId}/assets`,
+        formData
+      )
+      if (response.status === 200) {
+        const count = response.data?.uploads?.length ?? selectedFiles.length
+        setUploadMessage({ type: 'success', text: `${count} file(s) uploaded successfully.` })
+        setUploadedFiles(prev => [...prev, ...selectedFiles])
+        setSelectedFiles([])
+      }
     } catch (error) {
-      console.error('Error uploading files:', error)
-      alert('Error uploading files. Please try again.')
+      if (error.response?.status === 404) {
+        setUploadMessage({ type: 'error', text: error.response?.data?.error || 'Product not found.' })
+      } else if (error.response?.status === 400) {
+        setUploadMessage({ type: 'error', text: error.response?.data?.error || 'Invalid request.' })
+      } else {
+        setUploadMessage({ type: 'error', text: 'Upload failed. Please try again.' })
+      }
     } finally {
       setUploading(false)
     }
+  }
+
+  if (productsLoading) {
+    return (
+      <div className="flex flex-col justify-center items-center h-64">
+        <LoadingSpinner size="lg" />
+        <p className="mt-4 text-gray-600">Loading products...</p>
+      </div>
+    )
   }
 
   if (uploading) {
@@ -136,6 +191,16 @@ export default function AssetsUpload() {
         <p className="mt-2 text-gray-600">Upload images, documents, and other assets for your products</p>
       </div>
 
+      {uploadMessage.text && (
+        <div className={`mb-6 p-4 rounded-lg text-sm ${
+          uploadMessage.type === 'success'
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {uploadMessage.text}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Upload Area */}
         <div className="lg:col-span-2">
@@ -144,6 +209,28 @@ export default function AssetsUpload() {
               <h2 className="text-lg font-semibold text-gray-900">Upload Files</h2>
             </Card.Header>
             <Card.Content>
+              {/* Product selector */}
+              <div className="mb-6">
+                <label htmlFor="product-select" className="block text-sm font-medium text-gray-700 mb-1">
+                  Product
+                </label>
+                <select
+                  id="product-select"
+                  value={selectedProductId}
+                  onChange={(e) => setSelectedProductId(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                >
+                  <option value="">Select a product</option>
+                  {products.map((p) => (
+                    <option key={p.product_id} value={p.product_id}>
+                      {p.name} ({p.serial_number})
+                    </option>
+                  ))}
+                </select>
+                {products.length === 0 && (
+                  <p className="mt-1 text-xs text-gray-500">No products yet. Register a product first.</p>
+                )}
+              </div>
               {/* Drag and Drop Area */}
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${

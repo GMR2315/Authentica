@@ -20,7 +20,7 @@ export async function verifyProductHandler(req, res) {
     AUTHENTIC: 200,
     TAMPERED: 200,
     FAKE: 200,
+    BLOCKCHAIN_UNAVAILABLE: 200,
   };
-
   return res.status(httpStatus[result.status] || 200).json(result);
 }

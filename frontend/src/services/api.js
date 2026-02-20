@@ -1,20 +1,23 @@
 import axios from 'axios'
 
-// Mock API base URL - replace with actual API endpoint
-const API_BASE_URL = 'https://api.authentica.com'
+// Backend API base URL (no trailing slash). Vite exposes env vars prefixed with VITE_
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
-// Create axios instance
+// Create axios instance (no default Content-Type; set in interceptor per request)
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  timeout: 10000
 })
 
-// Request interceptor for adding auth token
+// Request interceptor: auth token + Content-Type by body type
 api.interceptors.request.use(
   (config) => {
+    // Content-Type: JSON for non-FormData; FormData leaves Content-Type to axios/browser (multipart + boundary)
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    } else {
+      config.headers['Content-Type'] = 'application/json'
+    }
     // Add auth token if available
     const token = localStorage.getItem('authToken')
     if (token) {
@@ -32,21 +35,21 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
+      // Handle unauthorized access (admin routes)
       localStorage.removeItem('authToken')
-      window.location.href = '/login'
+      window.location.href = '/admin/login'
     }
     return Promise.reject(error)
   }
 )
 
-// Product API
+// Product API (backend paths under /api/admin)
 export const productAPI = {
-  getAll: () => api.get('/products'),
-  getById: (id) => api.get(`/products/${id}`),
-  create: (data) => api.post('/products', data),
-  update: (id, data) => api.put(`/products/${id}`, data),
-  delete: (id) => api.delete(`/products/${id}`)
+  getAll: () => api.get('/api/admin/products'),
+  getById: (id) => api.get(`/api/admin/products/${id}`),
+  create: (data) => api.post('/api/admin/products', data),
+  update: (id, data) => api.put(`/api/admin/products/${id}`, data),
+  delete: (id) => api.delete(`/api/admin/products/${id}`)
 }
 
 // Asset API

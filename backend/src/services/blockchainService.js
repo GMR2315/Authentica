@@ -9,10 +9,22 @@ import { getNFTPassportContract, wallet } from '../config/blockchain.js';
  */
 export async function mintPassportOnChain(metadataHashHex) {
   const contract = getNFTPassportContract();
+  const contractAddress = await contract.getAddress();
+  console.log('[blockchainService] Before mint: RPC contract=', contractAddress, 'signer=', wallet.address);
 
   // Call mintPassport — mints to the backend wallet address (owner)
   const tx = await contract.mintPassport(wallet.address, metadataHashHex);
+  console.log('[blockchainService] Tx sent: hash=', tx.hash);
+
   const receipt = await tx.wait();
+  console.log('[blockchainService] Receipt received: blockNumber=', receipt.blockNumber, 'status=', receipt.status, 'logs count=', receipt.logs?.length);
+
+  if (receipt.status !== 1) {
+    console.error('[blockchainService] Tx reverted: status=', receipt.status);
+    throw new Error('Mint transaction reverted');
+  }
+
+  console.log('[blockchainService] receipt.logs:', JSON.stringify(receipt.logs?.map((l) => ({ address: l.address, topics: l.topics, dataLength: l.data?.length }))));
 
   // Parse the PassportMinted event to extract the tokenId
   let tokenId;
@@ -24,6 +36,7 @@ export async function mintPassportOnChain(metadataHashHex) {
       });
       if (parsed && parsed.name === 'PassportMinted') {
         tokenId = parsed.args.tokenId;
+        console.log('[blockchainService] Parsed PassportMinted: tokenId=', tokenId?.toString());
         break;
       }
     } catch {
@@ -32,13 +45,14 @@ export async function mintPassportOnChain(metadataHashHex) {
   }
 
   if (tokenId == null) {
+    console.error('[blockchainService] Failed to parse PassportMinted from receipt.logs');
     throw new Error('Failed to parse PassportMinted event from transaction receipt');
   }
 
   return {
     tokenId,
     txHash: receipt.hash,
-    contractAddress: await contract.getAddress(),
+    contractAddress,
   };
 }
 

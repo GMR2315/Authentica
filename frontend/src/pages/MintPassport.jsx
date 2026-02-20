@@ -5,6 +5,7 @@ import Button from '../components/Button'
 import StatusBadge from '../components/StatusBadge'
 import Select from '../components/Select'
 import LoadingSpinner from '../components/LoadingSpinner'
+import api, { productAPI } from '../services/api'
 
 export default function MintPassport() {
   const navigate = useNavigate()
@@ -20,48 +21,13 @@ export default function MintPassport() {
 
   const fetchProducts = async () => {
     try {
-      // Mock data - replace with actual API call
-      const mockProducts = [
-        { 
-          id: '1', 
-          name: 'Luxury Watch Model X', 
-          tagId: '', 
-          status: 'registered',
-          brand: 'SwissLux',
-          model: 'Model X',
-          serialNumber: 'SN123456789'
-        },
-        { 
-          id: '2', 
-          name: 'Designer Handbag', 
-          tagId: '', 
-          status: 'registered',
-          brand: 'Fashion House',
-          model: 'Classic Line',
-          serialNumber: 'SN987654321'
-        },
-        { 
-          id: '3', 
-          name: 'Premium Sneakers', 
-          tagId: 'TAG-003-DEF', 
-          status: 'minted',
-          brand: 'Sport Elite',
-          model: 'Ultra Pro',
-          serialNumber: 'SN555555555'
-        },
-        { 
-          id: '4', 
-          name: 'Gold Diamond Ring', 
-          tagId: '', 
-          status: 'registered',
-          brand: 'Jewelry Masters',
-          model: 'Eternity',
-          serialNumber: 'SN111111111'
-        }
-      ]
-      setProducts(mockProducts.filter(p => p.status !== 'minted'))
+      const res = await productAPI.getAll()
+      console.log('Mint products from backend:', res.data)
+      setProducts(res.data ?? [])
+      console.log('Products state after set:', res.data)
     } catch (error) {
       console.error('Error fetching products:', error)
+      setProducts([])
     }
   }
 
@@ -72,6 +38,7 @@ export default function MintPassport() {
   }
 
   const handleMintPassport = async () => {
+    console.log('🔥 MINT BUTTON CLICKED')
     if (!selectedProduct) {
       alert('Please select a product')
       return
@@ -80,35 +47,38 @@ export default function MintPassport() {
     setLoading(true)
 
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      const product = products.find(p => p.id === selectedProduct)
-      const tagId = generateTagId()
-      
-      const mockPassportData = {
-        tagId,
-        productId: product.id,
-        productName: product.name,
-        brand: product.brand,
-        model: product.model,
-        serialNumber: product.serialNumber,
-        mintedAt: new Date().toISOString(),
-        nftId: `NFT-${Math.random().toString(36).substring(2, 15)}`,
-        transactionHash: `0x${Math.random().toString(16).substring(2, 66)}`,
+      console.log('🔥 Calling backend mint API...')
+      const response = await api.post(
+        `/api/admin/products/${selectedProduct}/mint`,
+        { tag_type: 'QR' }
+      )
+      const { nftPassport, tag } = response.data
+      const product = products.find(p => p.product_id === selectedProduct)
+      setPassportData({
+        tagId: tag.tag_id,
+        nftId: nftPassport.token_id,
+        transactionHash: nftPassport.mint_tx_hash,
+        mintedAt: nftPassport.minted_at,
+        productName: product?.name ?? '',
+        brand: product?.brand ?? '',
+        model: product?.model ?? '',
+        serialNumber: product?.serial_number ?? '',
         status: 'minted'
-      }
-      
-      setPassportData(mockPassportData)
-      
-      // Generate QR code URL (mock)
-      setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tagId)}`)
-      
-      alert('Passport minted successfully!')
+      })
+      setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tag.tag_id)}`)
       fetchProducts()
     } catch (error) {
-      console.error('Error minting passport:', error)
-      alert('Error minting passport. Please try again.')
+      if (error.response?.status === 404) {
+        alert('Product not found.')
+      } else if (error.response?.status === 409) {
+        alert('Product already minted.')
+      } else if (error.response?.status === 500) {
+        alert('Mint failed. Please try again.')
+      } else if (error.request) {
+        alert('Blockchain connection error.')
+      } else {
+        alert('Mint failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -195,8 +165,8 @@ export default function MintPassport() {
                 value={selectedProduct}
                 onChange={(e) => setSelectedProduct(e.target.value)}
                 options={products.map(product => ({
-                  value: product.id,
-                  label: `${product.name} - ${product.brand} ${product.model}`
+                  value: product.product_id,
+                  label: `${product.name} (${product.serial_number})`
                 }))}
                 helper="Select a product to mint a passport for"
               />
@@ -205,14 +175,14 @@ export default function MintPassport() {
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-medium text-gray-900">Product Details</h4>
                   {(() => {
-                    const product = products.find(p => p.id === selectedProduct)
+                    const product = products.find(p => p.product_id === selectedProduct)
                     return product ? (
                       <div className="mt-2 text-sm text-gray-600 space-y-1">
                         <p><strong>Name:</strong> {product.name}</p>
-                        <p><strong>Brand:</strong> {product.brand}</p>
+                        <p><strong>Brand:</strong> {product.brand ?? '—'}</p>
                         <p><strong>Model:</strong> {product.model}</p>
-                        <p><strong>Serial Number:</strong> {product.serialNumber}</p>
-                        <p><strong>Status:</strong> <StatusBadge status={product.status} /></p>
+                        <p><strong>Serial Number:</strong> {product.serial_number}</p>
+                        <p><strong>Status:</strong> <StatusBadge status="registered" /></p>
                       </div>
                     ) : null
                   })()}

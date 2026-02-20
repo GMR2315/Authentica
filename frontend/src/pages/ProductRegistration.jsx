@@ -5,10 +5,13 @@ import Button from '../components/Button'
 import Input from '../components/Input'
 import Select from '../components/Select'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { productAPI } from '../services/api'
 
 export default function ProductRegistration() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
+  const [apiError, setApiError] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -65,21 +68,40 @@ export default function ProductRegistration() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
     if (!validateForm()) return
-    
+
     setLoading(true)
-    
+    setApiError('')
+    setSuccessMessage('')
+
+    const body = {
+      name: formData.name.trim(),
+      model: formData.model.trim(),
+      serial_number: formData.serialNumber.trim(),
+      description: formData.description != null ? formData.description.trim() || null : null
+    }
+
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      console.log('Product registered:', formData)
-      alert('Product registered successfully!')
-      navigate('/admin')
+      const response = await productAPI.create(body)
+      if (response.status === 201 && response.data) {
+        const productId = response.data.product_id
+        if (productId) {
+          console.log('Product registered. product_id:', productId)
+          setSuccessMessage(`Product registered successfully. Product ID: ${productId}`)
+        } else {
+          setSuccessMessage('Product registered successfully.')
+        }
+      }
     } catch (error) {
-      console.error('Error registering product:', error)
-      alert('Error registering product. Please try again.')
+      if (error.response?.status === 409) {
+        setApiError('Serial number already exists.')
+      } else if (error.response?.status === 400 && error.response?.data?.error) {
+        setApiError(error.response.data.error)
+      } else if (error.request) {
+        setApiError('Network error. Please check the connection and try again.')
+      } else {
+        setApiError('Error registering product. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -99,6 +121,17 @@ export default function ProductRegistration() {
         <h1 className="text-3xl font-bold text-gray-900">Register New Product</h1>
         <p className="mt-2 text-gray-600">Add a new product to the verification system</p>
       </div>
+
+      {successMessage && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+          {successMessage}
+        </div>
+      )}
+      {apiError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {apiError}
+        </div>
+      )}
 
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">

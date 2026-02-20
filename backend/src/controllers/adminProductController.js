@@ -1,6 +1,58 @@
 import { createProduct } from '../services/productService.js';
+import { prisma } from '../config/prisma.js';
 import pkg from '@prisma/client';
 const { Prisma } = pkg;
+
+/**
+ * GET /api/admin/products
+ * List all products. Ordered by created_at descending.
+ */
+export async function listProductsHandler(req, res) {
+  try {
+    const products = await prisma.product.findMany({
+      orderBy: { created_at: 'desc' },
+    });
+    return res.status(200).json(products);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/admin/products/:product_id
+ * Get a single product by ID with nft_passport and provenance (ordered by event_time asc).
+ */
+export async function getProductByIdHandler(req, res) {
+  try {
+    const { product_id } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { product_id },
+      include: {
+        nft_passport: true,
+        provenance: {
+          orderBy: { event_time: 'asc' },
+        },
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    return res.status(200).json(
+      JSON.parse(
+        JSON.stringify(product, (_, value) =>
+          typeof value === "bigint" ? value.toString() : value
+        )
+      )
+    );
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
 
 /**
  * POST /api/admin/products

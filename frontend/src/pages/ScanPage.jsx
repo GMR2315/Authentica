@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import Input from '../components/Input'
@@ -14,86 +14,46 @@ export default function ScanPage() {
   const videoRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  const handleManualInput = async () => {
+  const handleManualInput = () => {
     if (!tagId.trim()) {
       setError('Please enter a Tag ID')
       return
     }
-
     setError('')
-    setScanning(true)
-
-    try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Navigate to verification result with mock data
-      navigate('/verify', { 
-        state: { 
-          tagId: tagId.trim(),
-          scanMethod: 'manual'
-        } 
-      })
-    } catch (error) {
-      console.error('Error verifying tag:', error)
-      setError('Failed to verify Tag ID. Please try again.')
-    } finally {
-      setScanning(false)
-    }
+    navigate('/verify', {
+      state: {
+        tagId: tagId.trim(),
+        scanMethod: 'manual'
+      }
+    })
   }
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file')
       return
     }
-
-    setError('')
-    setScanning(true)
-
-    // Mock QR code processing
-    setTimeout(() => {
-      const mockTagId = 'TAG-001-XYZ' // Mock detected tag ID
-      navigate('/verify', { 
-        state: { 
-          tagId: mockTagId,
-          scanMethod: 'file'
-        } 
-      })
-    }, 2000)
+    setError('QR decoding not implemented. Please use Manual entry with the Tag ID.')
   }
 
   const startCameraScan = async () => {
     try {
       setScanning(true)
       setError('')
-      
-      // Request camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
       })
-      
       if (videoRef.current) {
         videoRef.current.srcObject = stream
       }
-      
-      // Mock QR code detection after 3 seconds
-      setTimeout(() => {
-        stopCamera()
-        const mockTagId = 'TAG-002-ABC'
-        navigate('/verify', { 
-          state: { 
-            tagId: mockTagId,
-            scanMethod: 'camera'
-          } 
-        })
-      }, 3000)
-    } catch (error) {
-      console.error('Camera access error:', error)
+      stopCamera()
+      setError('QR decoding not implemented. Please use Manual entry with the Tag ID.')
+    } catch (err) {
+      console.error('Camera access error:', err)
       setError('Failed to access camera. Please check permissions.')
+    } finally {
       setScanning(false)
     }
   }
@@ -266,14 +226,14 @@ export default function ScanPage() {
           </div>
         )}
 
-        {/* Admin Link */}
         <div className="mt-8 text-center">
-          <Link
-            to="/admin"
+          <button
+            type="button"
+            onClick={() => navigate('/')}
             className="text-sm text-gray-600 hover:text-gray-900"
           >
-            ← Back to Admin Dashboard
-          </Link>
+            ← Back to Home
+          </button>
         </div>
       </div>
     </div>

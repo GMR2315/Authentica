@@ -56,12 +56,15 @@ export async function mintPassport(productId, options = {}) {
   );
 
   // 6–7. Mint on-chain
+  console.log('[mintService] Calling mintPassportOnChain for product', productId);
   const { tokenId, txHash, contractAddress } = await mintPassportOnChain(metadataHash);
+  console.log('[mintService] mintPassportOnChain done: tokenId=', tokenId?.toString(), 'txHash=', txHash, 'contract=', contractAddress);
 
   // 8. Atomic DB writes inside a Prisma transaction
   let nftPassport;
   let tag;
 
+  console.log('[mintService] Starting DB transaction (timeout 60s)');
   try {
     const txResult = await prisma.$transaction(async (tx) => {
       // 8a. Double-check guard inside transaction to prevent race conditions.
@@ -101,7 +104,39 @@ export async function mintPassport(productId, options = {}) {
         },
       });
 
+      // 8e. Auto-insert 3 provenance events if product has none (idempotent)
+      const existingEvents = await tx.provenanceEvent.findMany({
+        where: { product_id: productId },
+      });
+      if (existingEvents.length === 0) {
+        await tx.provenanceEvent.createMany({
+          data: [
+            {
+              product_id: productId,
+              event_type: 'MANUFACTURED',
+              event_description: 'Product manufactured at registered facility',
+              event_time: product.created_at,
+            },
+            {
+              product_id: productId,
+              event_type: 'MINTED',
+              event_description: 'NFT Passport minted on blockchain',
+              event_time: new Date(),
+            },
+            {
+              product_id: productId,
+              event_type: 'TAG_ISSUED',
+              event_description: 'Secure QR tag generated and linked to NFT',
+              event_time: new Date(),
+            },
+          ],
+        });
+      }
+
       return { nftPassport: createdPassport, tag: createdTag };
+    }, {
+      timeout: 60000,  // allow transaction to run up to 60s
+      maxWait: 60000, // allow waiting up to 60s to acquire DB connection
     });
 
     nftPassport = txResult.nftPassport;
